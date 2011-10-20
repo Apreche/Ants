@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+python tools/playgame.py "python TutBot.py" "python tools/sample_bots/python/HunterBot.py" "python tools/sample_bots/python/HunterBot.py" "python tools/sample_bots/python/HunterBot.py" "python tools/sample_bots/python/HunterBot.py" "python tools/sample_bots/python/HunterBot.py" "python tools/sample_bots/python/HunterBot.py" --map_file tools/maps/multi_hill_maze/multi_maze_20.map --log_dir game_logs -e --turns 100
