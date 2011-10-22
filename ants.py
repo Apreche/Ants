@@ -6,6 +6,8 @@ import time
 from collections import defaultdict
 from math import sqrt
 from pygraph.classes.graph import graph
+from pygraph.algorithms.heuristics.euclidean import euclidean
+from pygraph.algorithms.minmax import heuristic_search
 
 MY_ANT = 0
 ANTS = 0
@@ -55,6 +57,7 @@ class Ants():
         self.spawnradius2 = 0
         self.turns = 0
         self.graph = graph()
+        self.heuristic = euclidean()
 
     def setup(self, data):
         'parse initial input and setup starting game state'
@@ -84,30 +87,34 @@ class Ants():
         self.map = [[LAND for col in range(self.cols)]
                     for row in range(self.rows)]
 
+        print "creating graph"
         # build the empty graph
-        for col in range(self.cols):
-            for row in range(self.rows):
+        for row in xrange(self.rows):
+            for col in xrange(self.cols):
                 self.graph.add_node((row,col),attrs=[('position',(row,col))])
-        for col in range(self.cols):
-            for row in range(self.rows):
-                this = (row,col)
-                up = (row+1,col)
-                if row == self.rows:
-                    up = (0,col)
-                self.graph.add_edge(this,up,wt=1)
-                right = (row,col+1)
-                if rcol == self.cols:
-                    right = (row,0)
-                self.graph.add_edge(this,right,wt=1)
+        for node in self.graph:
+            row, col = node
+            nextrow = row + 1
+            if nextrow == self.rows:
+                nextrow = 0
+            nextcol = col + 1
+            if nextcol == self.cols:
+                nextcol = 0
+            down = (nextrow, col)
+            right = (row, nextcol)
+            self.graph.add_edge((node,down), wt=1)
+            self.graph.add_edge((node,right), wt=1)
+        self.heuristic.optimize(self.graph)
+        print "graph created"
 
     def update(self, data):
         'parse engine input and update the game state'
         # start timer
         self.turn_start_time = time.clock()
-        
+
         # reset vision
         self.vision = None
-        
+
         # clear hill, ant and food data
         self.hill_list = {}
         for row, col in self.ant_list.keys():
@@ -119,7 +126,7 @@ class Ants():
         for row, col in self.food_list:
             self.map[row][col] = LAND
         self.food_list = []
-        
+
         # update map and create new ant and food lists
         for line in data.split('\n'):
             line = line.strip().lower()
@@ -130,6 +137,7 @@ class Ants():
                     col = int(tokens[2])
                     if tokens[0] == 'w':
                         self.map[row][col] = WATER
+                        self.graph.del_node(row,col)
                     elif tokens[0] == 'f':
                         self.map[row][col] = FOOD
                         self.food_list.append((row, col))
@@ -148,21 +156,22 @@ class Ants():
                         elif tokens[0] == 'h':
                             owner = int(tokens[3])
                             self.hill_list[(row, col)] = owner
-                        
+        self.heuristic.optimize(self.graph)
+
     def time_remaining(self):
         return self.turntime - int(1000 * (time.clock() - self.turn_start_time))
-    
+
     def issue_order(self, order):
         'issue an order by writing the proper ant location and direction'
         (row, col), direction = order
         sys.stdout.write('o %s %s %s\n' % (row, col, direction))
         sys.stdout.flush()
-        
+
     def finish_turn(self):
         'finish the turn by writing the go line'
         sys.stdout.write('go\n')
         sys.stdout.flush()
-    
+
     def my_hills(self):
         return [loc for loc, owner in self.hill_list.items()
                     if owner == MY_ANT]
@@ -170,7 +179,7 @@ class Ants():
     def enemy_hills(self):
         return [(loc, owner) for loc, owner in self.hill_list.items()
                     if owner != MY_ANT]
-        
+
     def my_ants(self):
         'return a list of all my ants'
         return [(row, col) for (row, col), owner in self.ant_list.items()
@@ -190,7 +199,7 @@ class Ants():
         'true if not water'
         row, col = loc
         return self.map[row][col] != WATER
-    
+
     def unoccupied(self, loc):
         'true if no ants are at the location'
         row, col = loc
@@ -200,47 +209,44 @@ class Ants():
         'calculate a new location given the direction and wrap correctly'
         row, col = loc
         d_row, d_col = AIM[direction]
-        return ((row + d_row) % self.rows, (col + d_col) % self.cols)        
+        return ((row + d_row) % self.rows, (col + d_col) % self.cols)
 
     def distance(self, loc1, loc2):
-        'calculate the closest distance between to locations'
-        row1, col1 = loc1
-        row2, col2 = loc2
-        d_col = min(abs(col1 - col2), self.cols - abs(col1 - col2))
-        d_row = min(abs(row1 - row2), self.rows - abs(row1 - row2))
-        return d_row + d_col
+        # use A* to get distance between two points
+        return len(heuristic_search(self.graph, loc1, loc2, self.heuristic))
 
     def direction(self, loc1, loc2):
-        'determine the 1 or 2 fastest (closest) directions to reach a location'
+        'determine the direction of the next step to take using A*'
         row1, col1 = loc1
-        row2, col2 = loc2
-        height2 = self.rows//2
-        width2 = self.cols//2
-        d = []
-        if row1 < row2:
-            if row2 - row1 >= height2:
-                d.append('n')
-            if row2 - row1 <= height2:
-                d.append('s')
-        if row2 < row1:
-            if row1 - row2 >= height2:
-                d.append('s')
-            if row1 - row2 <= height2:
-                d.append('n')
-        if col1 < col2:
-            if col2 - col1 >= width2:
-                d.append('w')
-            if col2 - col1 <= width2:
-                d.append('e')
-        if col2 < col1:
-            if col1 - col2 >= width2:
-                d.append('e')
-            if col1 - col2 <= width2:
-                d.append('w')
-        return d
+
+        path = heuristic_search(self.graph, loc1, loc2, self.heuristic)
+        try:
+            row2, col2 = path[1]
+        except IndexError:
+            return False
+
+        # translate into a direction SNEWSNEW!
+        if row1 - row2 == -1:
+            return 's'
+        elif row1 - row2 == 1:
+            return 'n'
+        elif col1 - col2 == -1:
+            return 'e'
+        elif col1 - col2 == 1:
+            return 'w'
+        elif (row1 - row2) > 0:
+            return 's'
+        elif (row1 - row2) < 0:
+            return 'n'
+        elif (col1 - col2) > 0:
+            return 'e'
+        elif (col1 - col2) < 0:
+            return 'w'
+        else:
+            return False
 
     def visible(self, loc):
-        ' determine which squares are visible to the given player '
+        'determine which squares are visible to the given player'
 
         if self.vision == None:
             if not hasattr(self, 'vision_offsets_2'):
@@ -264,7 +270,7 @@ class Ants():
                     self.vision[a_row+v_row][a_col+v_col] = True
         row, col = loc
         return self.vision[row][col]
-    
+
     def render_text_map(self):
         'return a pretty string representing the map'
         tmp = ''

@@ -26,12 +26,10 @@ class MyBot:
 
         targets = {}
         def do_move_location(loc, dest):
-            directions = ants.direction(loc, dest)
-            for direction in directions:
-                if do_move_direction(loc, direction):
-                    targets[dest] = loc
-                    return True
-                    break
+            direction = ants.direction(loc, dest)
+            if direction and do_move_direction(loc, direction):
+                targets[dest] = loc
+                return True
             else:
                 return False
 
