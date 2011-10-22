@@ -5,6 +5,7 @@ import random
 import time
 from collections import defaultdict
 from math import sqrt
+from pygraph.classes.graph import graph
 
 MY_ANT = 0
 ANTS = 0
@@ -53,6 +54,7 @@ class Ants():
         self.attackradius2 = 0
         self.spawnradius2 = 0
         self.turns = 0
+        self.graph = graph()
 
     def setup(self, data):
         'parse initial input and setup starting game state'
@@ -81,6 +83,22 @@ class Ants():
                     self.turns = int(tokens[1])
         self.map = [[LAND for col in range(self.cols)]
                     for row in range(self.rows)]
+
+        # build the empty graph
+        for col in range(self.cols):
+            for row in range(self.rows):
+                self.graph.add_node((row,col),attrs=[('position',(row,col))])
+        for col in range(self.cols):
+            for row in range(self.rows):
+                this = (row,col)
+                up = (row+1,col)
+                if row == self.rows:
+                    up = (0,col)
+                self.graph.add_edge(this,up,wt=1)
+                right = (row,col+1)
+                if rcol == self.cols:
+                    right = (row,0)
+                self.graph.add_edge(this,right,wt=1)
 
     def update(self, data):
         'parse engine input and update the game state'
