@@ -6,7 +6,7 @@ import time
 from collections import defaultdict
 from math import sqrt
 from pygraph.classes.graph import graph
-from pygraph.algorithms.heuristics.euclidean import euclidean
+from pygraph.algorithms.heuristics.scott import scott
 from pygraph.algorithms.minmax import heuristic_search
 
 MY_ANT = 0
@@ -57,7 +57,6 @@ class Ants():
         self.spawnradius2 = 0
         self.turns = 0
         self.graph = graph()
-        self.heuristic = euclidean()
 
     def setup(self, data):
         'parse initial input and setup starting game state'
@@ -87,11 +86,12 @@ class Ants():
         self.map = [[LAND for col in range(self.cols)]
                     for row in range(self.rows)]
 
-        print "creating graph"
         # build the empty graph
+        print "creating graph"
         for row in xrange(self.rows):
             for col in xrange(self.cols):
                 self.graph.add_node((row,col),attrs=[('position',(row,col))])
+        print "nodes created"
         for node in self.graph:
             row, col = node
             nextrow = row + 1
@@ -104,8 +104,8 @@ class Ants():
             right = (row, nextcol)
             self.graph.add_edge((node,down), wt=1)
             self.graph.add_edge((node,right), wt=1)
-        self.heuristic.optimize(self.graph)
-        print "graph created"
+        print "edges created"
+        print "graph done"
 
     def update(self, data):
         'parse engine input and update the game state'
@@ -137,7 +137,7 @@ class Ants():
                     col = int(tokens[2])
                     if tokens[0] == 'w':
                         self.map[row][col] = WATER
-                        self.graph.del_node(row,col)
+                        self.graph.del_node((row,col))
                     elif tokens[0] == 'f':
                         self.map[row][col] = FOOD
                         self.food_list.append((row, col))
@@ -156,7 +156,6 @@ class Ants():
                         elif tokens[0] == 'h':
                             owner = int(tokens[3])
                             self.hill_list[(row, col)] = owner
-        self.heuristic.optimize(self.graph)
 
     def time_remaining(self):
         return self.turntime - int(1000 * (time.clock() - self.turn_start_time))
@@ -212,14 +211,21 @@ class Ants():
         return ((row + d_row) % self.rows, (col + d_col) % self.cols)
 
     def distance(self, loc1, loc2):
-        # use A* to get distance between two points
-        return len(heuristic_search(self.graph, loc1, loc2, self.heuristic))
+        return len(heuristic_search(self.graph, loc1, loc2, scott()))
+
+    def quick_distance(self, loc1, loc2):
+        'calculate the closest distance between to locations'
+        row1, col1 = loc1
+        row2, col2 = loc2
+        d_col = min(abs(col1 - col2), self.cols - abs(col1 - col2))
+        d_row = min(abs(row1 - row2), self.rows - abs(row1 - row2))
+        return d_row + d_col
 
     def direction(self, loc1, loc2):
         'determine the direction of the next step to take using A*'
         row1, col1 = loc1
 
-        path = heuristic_search(self.graph, loc1, loc2, self.heuristic)
+        path = heuristic_search(self.graph, loc1, loc2, scott())
         try:
             row2, col2 = path[1]
         except IndexError:
@@ -244,6 +250,36 @@ class Ants():
             return 'w'
         else:
             return False
+
+    def quick_direction(self, loc1, loc2):
+        'determine the 1 or 2 fastest (closest) directions to reach a location'
+        row1, col1 = loc1
+        row2, col2 = loc2
+        height2 = self.rows//2
+        width2 = self.cols//2
+        d = []
+        if row1 < row2:
+            if row2 - row1 >= height2:
+                d.append('n')
+            if row2 - row1 <= height2:
+                d.append('s')
+        if row2 < row1:
+            if row1 - row2 >= height2:
+                d.append('s')
+            if row1 - row2 <= height2:
+                d.append('n')
+        if col1 < col2:
+            if col2 - col1 >= width2:
+                d.append('w')
+            if col2 - col1 <= width2:
+                d.append('e')
+        if col2 < col1:
+            if col1 - col2 >= width2:
+                d.append('e')
+            if col1 - col2 <= width2:
+                d.append('w')
+        return d
+
 
     def visible(self, loc):
         'determine which squares are visible to the given player'
